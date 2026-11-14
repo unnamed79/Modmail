@@ -26,6 +26,10 @@ TOPICS = (
     "Discord Premium Subscriptions and Patreon Supporter Support",
     "Event Submissions", "Partnerships", "Other",
 )
+COMMAND_ROLE = 1456663207623004221
+APPEAL_URL = "https://dyno.gg/form/f4ce22f9"
+TAG_NAMES = ("Reports", "I'm Muted", "Roles", "Subscriptions", "Event Submissions", "Partnerships", "Other")
+
 MENU = (
     "What do you need help with? Please keep in mind that **we do not work for or have any affiliation with Rockstar**.\n"
     "If you are here for technical support or for support outside the GTAO Discord server, the thread will be automatically closed.\n\n"
@@ -95,6 +99,10 @@ async def on_message(message):
                     await message.channel.send("Request closed. For Rockstar support, visit https://support.rockstargames.com/hc/en-us")
                     db.execute("DELETE FROM intake WHERE member=?", (uid,))
                     return
+                if state[0] == 2 or (state[0] == 0 and answer == "2"):
+                    await message.channel.send(APPEAL_URL)
+                    db.execute("DELETE FROM intake WHERE member=?", (uid,))
+                    return
                 if state[0] == 0:
                     if answer not in {str(n) for n in range(1, len(TOPICS) + 1)}:
                         await message.channel.send("Please reply with a number from 1 to 7, or type support for technical support.")
@@ -106,7 +114,11 @@ async def on_message(message):
                     await message.channel.send("Please send your message or attach a file.")
                     return
                 topic = TOPICS[state[0]-1]
-                post = await forum.create_thread(name=f"{message.author.name} - {topic}", content=f"<@&{STAFF}> New ModMail. Message from : <@{uid}>\nTopic: {topic}. Use !replay followed by your message to respond and !close to finish.", allowed_mentions=discord.AllowedMentions(roles=[discord.Object(id=STAFF)], users=False, everyone=False))
+                tag_name = TAG_NAMES[state[0]-1]
+                tag = next((t for t in forum.available_tags if t.name.strip().casefold() == tag_name.casefold()), None)
+                if tag is None:
+                    logging.warning("Missing ModMail forum tag: %s", tag_name)
+                post = await forum.create_thread(applied_tags=[tag] if tag else [], name=f"{message.author.name} - {topic}", content=f"<@&{STAFF}> New ModMail. Message from : <@{uid}>\nTopic: {topic}. Use !replay followed by your message to respond and !close to finish.", allowed_mentions=discord.AllowedMentions(roles=[discord.Object(id=STAFF)], users=False, everyone=False))
                 thread = post.thread
                 db.execute("INSERT OR REPLACE INTO cases VALUES (?,?)", (uid, thread.id))
                 db.execute("DELETE FROM intake WHERE member=?", (uid,))
@@ -127,7 +139,7 @@ async def on_message(message):
 def recipient(channel, user):
     if not isinstance(channel, discord.Thread) or channel.parent_id != FORUM:
         return None
-    if not (user.guild_permissions.administrator or user.get_role(STAFF)):
+    if not user.get_role(COMMAND_ROLE):
         return None
     return db.execute("SELECT member FROM cases WHERE thread=?", (channel.id,)).fetchone()
 
