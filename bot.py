@@ -106,13 +106,12 @@ async def on_message(message):
                     await message.channel.send("Please send your message or attach a file.")
                     return
                 topic = TOPICS[state[0]-1]
-                post = await forum.create_thread(name=f"{message.author.name} - {topic}", content=f"<@&{STAFF}> New ModMail. Message from : <@{uid}>\\nTopic: {topic}. Use !replay followed by your message to respond and !close to finish.", allowed_mentions=discord.AllowedMentions(roles=[discord.Object(id=STAFF)], users=False, everyone=False))
+                post = await forum.create_thread(name=f"{message.author.name} - {topic}", content=f"<@&{STAFF}> New ModMail. Message from : <@{uid}>\nTopic: {topic}. Use !replay followed by your message to respond and !close to finish.", allowed_mentions=discord.AllowedMentions(roles=[discord.Object(id=STAFF)], users=False, everyone=False))
                 thread = post.thread
                 db.execute("INSERT OR REPLACE INTO cases VALUES (?,?)", (uid, thread.id))
                 db.execute("DELETE FROM intake WHERE member=?", (uid,))
             if thread.archived:
                 await thread.edit(archived=False)
-            await thread.send(f"Message from : <@{uid}>")
             for start in range(0, len(message.content), 2000):
                 await thread.send(message.content[start:start+2000])
             for attachment in message.attachments:
