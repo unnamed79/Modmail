@@ -75,6 +75,25 @@ def recipient(channel, user):
         return None
     return db.execute("SELECT member FROM cases WHERE thread=?", (channel.id,)).fetchone()
 
+async def finish_case(thread):
+    row = db.execute("SELECT member FROM cases WHERE thread=?", (thread.id,)).fetchone()
+    if not row:
+        return
+    db.execute("DELETE FROM cases WHERE thread=?", (thread.id,))
+    try:
+        member = await client.fetch_user(row[0])
+        await member.send("Thread has been closed by the servers staff.")
+        return True
+    except discord.HTTPException:
+        logging.warning("Could not deliver closure DM for post %s", thread.id)
+        return False
+
+@client.event
+async def on_thread_update(before, after):
+    if after.parent_id == FORUM and after.archived and after.locked and not (before.archived and before.locked):
+        async with lock:
+            await finish_case(after)
+
 async def staff_command(message):
     parts = message.content.strip().split(maxsplit=1)
     if not parts or parts[0].lower() not in {"!reply", "!replay", "!close"}:
@@ -87,7 +106,8 @@ async def staff_command(message):
             if len(parts) != 1:
                 return await message.reply("To close the conversation, type !close on its own.")
             await message.channel.edit(locked=True, archived=True)
-            db.execute("DELETE FROM cases WHERE thread=?", (message.channel.id,))
+            if not await finish_case(message.channel):
+                await message.add_reaction("⚠️")
             return
         if len(parts) != 2 or len(parts[1]) > 2000:
             return await message.reply("Use !replay followed by 1–2000 characters.")
@@ -120,8 +140,8 @@ async def close(interaction: discord.Interaction):
         if not recipient(interaction.channel, interaction.user):
             return await interaction.followup.send("Use this inside an open ModMail post as staff.")
         await interaction.channel.edit(archived=True, locked=True)
-        db.execute("DELETE FROM cases WHERE thread=?", (interaction.channel_id,))
-        await interaction.followup.send("Conversation closed.")
+        delivered = await finish_case(interaction.channel)
+        await interaction.followup.send("Conversation closed." if delivered else "Conversation closed, but Discord could not deliver the closing DM.")
 
 if __name__ == "__main__":
     import asyncio as aio
